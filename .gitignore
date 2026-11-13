@@ -1,0 +1,12 @@
+# Media e lavori: mai nel repo
+progetti/**
+!progetti/README.md
+!progetti/esempio/
+!progetti/esempio/testo.md
+
+__pycache__/
+*.egg-info/
+.venv/
+.pytest_cache/
+.superpowers/
+.DS_Store
