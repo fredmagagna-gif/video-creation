@@ -13,7 +13,9 @@ Voice-over con la tua voce clonata per video social, gestito chiedendo a Claude.
 - Mac Apple Silicon con macOS 13.3+ e **VoiceStudio** installato
   (`brew install --cask debpalash/tap/voicestudio`), con un modello di sintesi vocale e
   uno di trascrizione (Whisper) scaricati dal Model Manager.
-- **FFmpeg**: `brew install ffmpeg`
+- **FFmpeg completo**: `brew install ffmpeg-full` — l'`ffmpeg` standard di Homebrew non
+  sa bruciare i sottotitoli (manca libass). Lo script trova `ffmpeg-full` da solo, anche se
+  non è nel PATH; per usare un altro FFmpeg imposta `VIDEOCREATION_FFMPEG_DIR`.
 - **Python 3.10+** (quello di macOS/Homebrew va bene; nessuna libreria da installare).
 - **Claude Code**.
 
@@ -50,7 +52,11 @@ python3 scripts/monta.py progetti/reel/video.mp4 progetti/reel/voce.wav \
   --musica progetti/reel/musica.mp3        # opzionale, va in loop
   # --togli-audio-originale                # elimina l'audio del video
   # --no-sottotitoli                       # senza trascrizione
+  # --srt progetti/reel/out/video_vo.srt   # rimonta con sottotitoli corretti a mano
 ```
+
+I sottotitoli vengono dalla trascrizione della voce: nomi propri e marchi possono uscire
+sbagliati. Correggi l'`.srt` in `out/` con un editor di testo e rimonta con `--srt`.
 
 ## Problemi frequenti
 
@@ -60,7 +66,8 @@ python3 scripts/monta.py progetti/reel/video.mp4 progetti/reel/voce.wav \
 | Claude riceve `wav_base64` invece di un file | Il setup non è attivo: rilancia `setup_voicestudio.py` e riavvia VoiceStudio. |
 | "Nessun modello di trascrizione" (409) | Scarica un modello Whisper in VoiceStudio, o usa `--no-sottotitoli`. |
 | "OMNIVOICE_MCP_BASE_PATH is not set" | Come sopra: setup + riavvio. |
-| `FFmpeg non trovato` | `brew install ffmpeg` |
+| `FFmpeg non trovato` | `brew install ffmpeg-full` |
+| "Questo FFmpeg non sa bruciare i sottotitoli" | `brew install ffmpeg-full`, oppure `--no-sottotitoli`. |
 
 ## Sviluppo
 

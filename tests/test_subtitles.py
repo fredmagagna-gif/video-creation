@@ -49,9 +49,48 @@ def test_strips_whitespace_and_skips_empty_words():
     assert _cues(words_to_srt(words))[0][2] == "Ciao mondo"
 
 
-def test_uses_words_when_present():
-    result = {"words": _words(["a", "b"]), "segments": [{"start": 0, "end": 9, "text": "x"}]}
+def test_uses_word_timing_when_words_match_segment():
+    result = {
+        "words": _words(["a", "b"], start=1.0),
+        "segments": [{"start": 0, "end": 9, "text": "a b"}],
+    }
+    assert _cues(transcript_to_srt(result))[0][1:] == ["00:00:01,000 --> 00:00:01,600", "a b"]
+
+
+def test_uses_words_without_segments():
+    result = {"words": _words(["a", "b"])}
     assert _cues(transcript_to_srt(result))[0][2] == "a b"
+
+
+def test_keeps_numbers_missing_from_words():
+    # Gli allineatori lasciano senza tempi numeri e simboli: VoiceStudio li toglie da `words`.
+    result = {
+        "segments": [{"start": 0.0, "end": 2.0, "text": " 3 errori da evitare"}],
+        "words": [
+            {"word": "errori", "start": 0.4, "end": 0.9},
+            {"word": "da", "start": 0.9, "end": 1.1},
+            {"word": "evitare", "start": 1.1, "end": 1.9},
+        ],
+    }
+    assert _cues(transcript_to_srt(result)) == [
+        ["1", "00:00:00,000 --> 00:00:02,000", "3 errori da evitare"]
+    ]
+
+
+def test_mismatch_in_one_segment_keeps_word_timing_in_others():
+    result = {
+        "segments": [
+            {"start": 0.0, "end": 1.0, "text": "ciao a tutti"},
+            {"start": 5.0, "end": 6.0, "text": "il 20% in più"},
+        ],
+        "words": _words(["ciao", "a", "tutti"], start=0.1, dur=0.2)
+        + [{"word": "il", "start": 5.0, "end": 5.2}, {"word": "in", "start": 5.5, "end": 5.7},
+           {"word": "più", "start": 5.7, "end": 6.0}],
+    }
+    cues = _cues(transcript_to_srt(result))
+    assert cues[0][1:] == ["00:00:00,100 --> 00:00:00,700", "ciao a tutti"]
+    assert cues[1][2] == "il 20% in più"
+    assert cues[1][1].startswith("00:00:05,000")
 
 
 def test_falls_back_to_segments():
@@ -64,3 +103,15 @@ def test_falls_back_to_segments():
 def test_empty_transcript():
     assert transcript_to_srt({"text": "", "words": [], "segments": []}) == ""
     assert transcript_to_srt({"text": ""}) == ""
+
+
+def test_punctuation_difference_keeps_word_timing_and_segment_text():
+    result = {
+        "segments": [{"start": 0.0, "end": 3.0, "text": "Ciao, a tutti!"}],
+        "words": [{"word": "ciao", "start": 0.2, "end": 0.5},
+                  {"word": "a", "start": 0.5, "end": 0.6},
+                  {"word": "tutti", "start": 0.6, "end": 1.0}],
+    }
+    assert _cues(transcript_to_srt(result)) == [
+        ["1", "00:00:00,200 --> 00:00:01,000", "Ciao, a tutti!"]
+    ]

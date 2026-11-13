@@ -46,12 +46,45 @@ def words_to_srt(words: list[dict], max_words: int = 4, max_chars: int = 28,
     return _render(cues)
 
 
+def _norm(token: str) -> str:
+    return "".join(ch for ch in str(token).lower() if ch.isalnum())
+
+
+def _interpolate(seg: dict) -> list[dict]:
+    """Tempi stimati per le parole del segmento, proporzionali alla lunghezza."""
+    tokens = str(seg.get("text", "")).split()
+    start, end = float(seg["start"]), float(seg["end"])
+    weights = [len(t) + 1 for t in tokens]
+    total = sum(weights) or 1
+    out, t = [], start
+    for token, weight in zip(tokens, weights):
+        step = (end - start) * weight / total
+        out.append({"word": token, "start": t, "end": t + step})
+        t += step
+    if out:
+        out[-1]["end"] = end
+    return out
+
+
 def transcript_to_srt(result: dict) -> str:
-    """SRT dalla risposta `verbose_json`: parole se ci sono, altrimenti segmenti."""
-    if result.get("words"):
-        return words_to_srt(result["words"])
-    cues = [
-        (float(seg["start"]), float(seg["end"]), str(seg.get("text", "")).strip())
-        for seg in result.get("segments") or []
-    ]
-    return _render([cue for cue in cues if cue[2]])
+    """SRT dalla risposta `verbose_json`.
+
+    Il testo dei segmenti fa fede. Per ogni segmento si usano i tempi delle singole
+    parole quando coincidono col testo; se mancano parole (VoiceStudio scarta i token
+    senza tempi, tipicamente numeri e simboli) i tempi vengono stimati sul segmento.
+    """
+    words = [w for w in result.get("words") or [] if str(w.get("word", "")).strip()]
+    segments = [s for s in result.get("segments") or [] if str(s.get("text", "")).strip()]
+    if not segments:
+        return words_to_srt(words)
+
+    timed: list[dict] = []
+    for seg in segments:
+        start, end = float(seg["start"]) - 0.05, float(seg["end"]) + 0.05
+        inside = [w for w in words if float(w["start"]) >= start and float(w["end"]) <= end]
+        tokens = str(seg["text"]).split()
+        if [_norm(w["word"]) for w in inside] == [_norm(t) for t in tokens]:
+            timed.extend({**w, "word": token} for w, token in zip(inside, tokens))
+        else:
+            timed.extend(_interpolate(seg))
+    return words_to_srt(timed)

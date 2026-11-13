@@ -27,3 +27,11 @@ def test_readme_mentions_setup():
     assert "setup_voicestudio.py" in readme
     assert "monta.py" in readme
     assert (ROOT / "docs" / "doppiaggio.md").exists()
+
+
+def test_docs_require_ffmpeg_full_and_mention_srt_override():
+    readme = (ROOT / "README.md").read_text()
+    skill = (ROOT / ".claude" / "skills" / "voiceover" / "SKILL.md").read_text()
+    assert "brew install ffmpeg-full" in readme
+    assert "brew install ffmpeg\n" not in readme and "brew install ffmpeg`" not in readme
+    assert "--srt" in readme and "--srt" in skill

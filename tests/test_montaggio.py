@@ -4,8 +4,8 @@ import subprocess
 
 import pytest
 
-from videocreation import montaggio
-from videocreation.media import probe
+from videocreation import media, montaggio
+from videocreation.media import find_ffmpeg, has_subtitles_filter, probe
 from videocreation.montaggio import build_command, main, monta
 from videocreation.voicestudio import VoiceStudioError
 
@@ -31,6 +31,8 @@ def clips(tmp_path_factory):
         "voce2": d / "voce2.wav",
         "voce5": d / "voce5.wav",
         "musica1": d / "musica1.wav",
+        "dispari": d / "dispari.mp4",
+        "hdr": d / "hdr.mp4",
     }
     _ff("-f", "lavfi", "-i", "testsrc=size=360x640:rate=25:duration=3",
         "-f", "lavfi", "-i", "sine=frequency=220:duration=3",
@@ -40,6 +42,12 @@ def clips(tmp_path_factory):
     _ff("-f", "lavfi", "-i", "sine=frequency=880:duration=2", str(c["voce2"]))
     _ff("-f", "lavfi", "-i", "sine=frequency=880:duration=5", str(c["voce5"]))
     _ff("-f", "lavfi", "-i", "sine=frequency=440:duration=1", str(c["musica1"]))
+    _ff("-f", "lavfi", "-i", "testsrc=size=361x641:rate=25:duration=3",
+        "-c:v", "libx264rgb", str(c["dispari"]))
+    _ff("-f", "lavfi", "-i", "testsrc=size=360x640:rate=25:duration=3",
+        "-c:v", "libx265", "-pix_fmt", "yuv420p10le", "-x265-params", "log-level=error",
+        "-color_primaries", "bt2020", "-color_trc", "arib-std-b67", "-colorspace", "bt2020nc",
+        str(c["hdr"]))
     return c
 
 
@@ -162,3 +170,108 @@ def test_cli_success_prints_paths(tmp_path, clips, capsys):
     video, voce = _work(tmp_path, clips, "video", "voce2")
     assert main([str(video), str(voce), "--togli-audio-originale"]) == 0
     assert "video_vo.mp4" in capsys.readouterr().out
+
+
+def _stream(path, *fields):
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+         "stream=" + ",".join(fields), "-of", "default=nw=1", str(path)],
+        capture_output=True, text=True, check=True,
+    ).stdout
+    return dict(line.split("=", 1) for line in out.split())
+
+
+def test_odd_dimensions_are_made_even(tmp_path, clips):
+    video, voce = _work(tmp_path, clips, "dispari", "voce2")
+    mp4, _ = monta(video, voce)
+    info = probe(mp4)
+    assert (info.width, info.height) == (360, 640)
+
+
+def test_hdr_input_stays_10bit_hevc_hlg(tmp_path, clips):
+    assert probe(clips["hdr"]).color_transfer == "arib-std-b67"
+    video, voce = _work(tmp_path, clips, "hdr", "voce2")
+    mp4, _ = monta(video, voce)
+    s = _stream(mp4, "codec_name", "pix_fmt", "color_transfer", "color_primaries", "codec_tag_string")
+    assert s["codec_name"] == "hevc"
+    assert s["pix_fmt"] == "yuv420p10le"
+    assert s["color_transfer"] == "arib-std-b67"
+    assert s["color_primaries"] == "bt2020"
+    assert s["codec_tag_string"] == "hvc1"
+
+
+def test_sdr_input_stays_h264(tmp_path, clips):
+    video, voce = _work(tmp_path, clips, "video", "voce2")
+    mp4, _ = monta(video, voce, sottotitoli=False)
+    assert _stream(mp4, "codec_name")["codec_name"] == "h264"
+
+
+def test_hdr_subtitles_are_not_peak_white(clips, tmp_path):
+    cmd = build_command(clips["hdr"], clips["voce2"], tmp_path / "o.mp4",
+                        info_video=probe(clips["hdr"]), durata_voce=2.0, srt_name="subs.srt")
+    graph = cmd[cmd.index("-filter_complex") + 1]
+    assert "PrimaryColour=&H00C0C0C0" in graph
+
+
+def test_srt_given_skips_transcription(tmp_path, clips, monkeypatch):
+    def boom(*a, **k):
+        raise AssertionError("non deve trascrivere")
+    monkeypatch.setattr(montaggio, "transcribe_words", boom)
+    video, voce = _work(tmp_path, clips, "video", "voce2")
+    mio = tmp_path / "corretto.srt"
+    mio.write_text("1\n00:00:00,000 --> 00:00:01,000\n3 errori\n")
+    mp4, srt = monta(video, voce, srt=mio)
+    assert mp4.exists()
+    assert srt.read_text() == mio.read_text()
+
+
+def test_cli_srt_option(tmp_path, clips, monkeypatch):
+    monkeypatch.setattr(montaggio, "transcribe_words", lambda *a, **k: 1 / 0)
+    video, voce = _work(tmp_path, clips, "video", "voce2")
+    mio = tmp_path / "mio.srt"
+    mio.write_text("1\n00:00:00,000 --> 00:00:01,000\nciao\n")
+    assert main([str(video), str(voce), "--srt", str(mio)]) == 0
+
+
+def _fake_ffmpeg(folder, filters):
+    folder.mkdir(parents=True)
+    script = folder / "ffmpeg"
+    script.write_text(f"#!/bin/sh\necho ' ... {filters}  V->V  x'\n")
+    script.chmod(0o755)
+    return script
+
+
+def test_find_ffmpeg_prefers_env_dir(tmp_path, monkeypatch):
+    fake = _fake_ffmpeg(tmp_path / "bin", "subtitles")
+    monkeypatch.setenv("VIDEOCREATION_FFMPEG_DIR", str(fake.parent))
+    assert find_ffmpeg() == fake
+
+
+def test_find_ffmpeg_prefers_ffmpeg_full(tmp_path, monkeypatch):
+    full = _fake_ffmpeg(tmp_path / "opt" / "ffmpeg-full" / "bin", "subtitles")
+    monkeypatch.delenv("VIDEOCREATION_FFMPEG_DIR", raising=False)
+    monkeypatch.setattr(media, "FFMPEG_FULL_DIRS", [full.parent])
+    assert find_ffmpeg() == full
+
+
+def test_has_subtitles_filter(tmp_path):
+    assert has_subtitles_filter(_fake_ffmpeg(tmp_path / "a", "subtitles")) is True
+    assert has_subtitles_filter(_fake_ffmpeg(tmp_path / "b", "scale")) is False
+
+
+def test_missing_libass_stops_before_transcribing(tmp_path, clips, monkeypatch, capsys):
+    def boom(*a, **k):
+        raise AssertionError("non deve trascrivere")
+    monkeypatch.setattr(montaggio, "transcribe_words", boom)
+    monkeypatch.setattr(montaggio, "has_subtitles_filter", lambda ffmpeg: False)
+    video, voce = _work(tmp_path, clips, "video", "voce2")
+    assert main([str(video), str(voce)]) == 1
+    err = capsys.readouterr().err
+    assert "ffmpeg-full" in err and "--no-sottotitoli" in err
+    assert not (tmp_path / "out" / "video_vo.mp4").exists()
+
+
+def test_missing_libass_is_fine_without_subtitles(tmp_path, clips, monkeypatch):
+    monkeypatch.setattr(montaggio, "has_subtitles_filter", lambda ffmpeg: False)
+    video, voce = _work(tmp_path, clips, "video", "voce2")
+    assert main([str(video), str(voce), "--no-sottotitoli"]) == 0

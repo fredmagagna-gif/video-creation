@@ -38,10 +38,14 @@ description: Genera un voice-over con la voce clonata dell'utente tramite VoiceS
    - `--togli-audio-originale` se il video ha già una voce parlata o rumore inutile.
    - Se esce con codice 2 (VoiceStudio non raggiungibile o senza modello di
      trascrizione), riferisci il messaggio e proponi `--no-sottotitoli`.
+   - Se dice che FFmpeg non sa bruciare i sottotitoli: serve `brew install ffmpeg-full`.
 
 6. **Riporta** all'utente: percorso del video finale e dell'`.srt`, durata della voce
-   rispetto al video (lo script avvisa se ha dovuto allungare il video), e suggerisci
-   di controllare i sottotitoli nell'`.srt` (nomi propri e numeri possono essere sbagliati).
+   rispetto al video (lo script avvisa se ha dovuto allungare il video).
+
+7. **Controlla i sottotitoli**: leggi tu l'`.srt` confrontandolo col testo che hai fatto
+   pronunciare. Se ci sono errori (nomi propri, marchi, numeri), correggi l'`.srt`
+   e rimonta con `--srt progetti/<nome>/out/<video>_vo.srt` (non ritrascrive).
 
 ## Altre lingue
 
