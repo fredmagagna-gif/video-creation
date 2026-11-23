@@ -3,7 +3,7 @@
 Voice-over per video social con VoiceStudio (MCP locale, `.mcp.json`) + montaggio FFmpeg.
 Rispondi all'utente in italiano.
 
-- Skill: `voce-clonata` (una volta), `voiceover` (per ogni video), `copywriter`
+- Skill: `voce-clonata` (una volta), `voiceover` (per ogni video), `copywriter-persuasione`
   (testi persuasivi: post, reel, landing, email; il testo dei reel va in `testo.md`). Doppiaggio: `docs/doppiaggio.md` (si fa nell'app).
 - Lavori dell'utente in `progetti/<nome>/` (media ignorati da git). È anche l'unica
   cartella che VoiceStudio legge/scrive (`OMNIVOICE_MCP_BASE_PATH`).

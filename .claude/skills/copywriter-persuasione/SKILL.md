@@ -1,5 +1,5 @@
 ---
-name: copywriter
+name: copywriter-persuasione
 description: Scrive o rivede testi persuasivi di vendita secondo i principi di "Copywriting persuasivo" (Padovesi). Usala quando l'utente chiede un copy, un post o un'inserzione per Facebook/Instagram, il testo di un reel o di un voice-over che vende, una landing page, una scheda prodotto, una sequenza email, headline/ganci/CTA, o dice "rendilo più persuasivo", "scrivimi un testo che venda", "rivedi questo copy".
 ---
 
